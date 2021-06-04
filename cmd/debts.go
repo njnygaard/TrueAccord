@@ -339,7 +339,6 @@ func processPaymentPlans(pp []PaymentPlanResponse, p []PaymentResponse) (payment
 		paymentPlan.StartDate = pp[i].StartDate
 
 		// TODO: Negative Check
-		// I didn't complete this because I think it is unnecessary.
 		// If we decrement the payment plan below, it means the user overpaid.
 		// That opens up a whole other pathway, I think it is sufficient to say the plan is done for now.
 		if pp[i].AmountToPay <= 0 {
