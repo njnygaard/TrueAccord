@@ -74,15 +74,15 @@ func gatherResponses() {
 
 	logger := logrus.New()
 	var err error
-	//var debts []DebtResponse
+	var debts []DebtResponse
 	var payments []PaymentResponse
 	var paymentPlans []PaymentPlanResponse
 
-	//debts, err = getDebts()
-	//if err != nil {
-	//	logger.Fatal("error getting debts")
-	//	return
-	//}
+	debts, err = getDebts()
+	if err != nil {
+		logger.Fatal("error getting debts")
+		return
+	}
 
 	payments, err = getPayments()
 	if err != nil {
@@ -103,19 +103,19 @@ func gatherResponses() {
 		return
 	}
 
-	logger.Info(spew.Sdump(processedPaymentPlans))
+	//logger.Info(spew.Sdump(processedPaymentPlans))
 
-	//var processedDebts []Debt
-	//processedDebts, err = processDebts(debts, paymentPlans, payments)
-	//if err != nil {
-	//	logger.Error("could not process debts")
-	//	return
-	//}
+	var processedDebts []Debt
+	processedDebts, err = processDebts(debts, processedPaymentPlans, payments)
+	if err != nil {
+		logger.Error("could not process debts")
+		return
+	}
 
-	//logger.Info(spew.Sdump(processedDebts))
+	logger.Info(spew.Sdump(processedDebts))
 }
 
-func processDebts(d []DebtResponse, pp []PaymentPlanResponse, _ []PaymentResponse) (debts []Debt, err error) {
+func processDebts(d []DebtResponse, pp []PaymentPlan, _ []PaymentResponse) (debts []Debt, err error) {
 
 	// TODO: Consume PaymentPlan not PaymentPlanResponse
 	// We need to know if a given paymentPlan is complete
@@ -133,7 +133,7 @@ func processDebts(d []DebtResponse, pp []PaymentPlanResponse, _ []PaymentRespons
 	for i := range d {
 		var paymentPlanFound bool // zero value false
 		for j := range pp {
-			if d[i].Id == pp[j].DebtId {
+			if d[i].Id == pp[j].DebtId && pp[j].IsComplete != true {
 				paymentPlanFound = true
 				break
 			}
@@ -151,7 +151,33 @@ func processDebts(d []DebtResponse, pp []PaymentPlanResponse, _ []PaymentRespons
 	return
 }
 
-func processPaymentPlans(pp []PaymentPlanResponse, p []PaymentResponse)(paymentPlans []PaymentPlan, err error) {
+func processPaymentPlans(pp []PaymentPlanResponse, p []PaymentResponse) (paymentPlans []PaymentPlan, err error) {
+
+	for i := range p {
+		for j := range pp {
+			if p[i].PaymentPlanId == pp[j].Id {
+				pp[j].AmountToPay -= p[i].Amount
+			}
+		}
+	}
+
+	for i := range pp {
+
+		var paymentPlan PaymentPlan
+		paymentPlan.Id = pp[i].Id
+		paymentPlan.DebtId = pp[i].DebtId
+		paymentPlan.AmountToPay = pp[i].AmountToPay
+		paymentPlan.InstallmentFrequency = pp[i].InstallmentFrequency
+		paymentPlan.InstallmentAmount = pp[i].InstallmentAmount
+		paymentPlan.StartDate = pp[i].StartDate
+
+		// TODO: Negative Check
+		if pp[i].AmountToPay <= 0 {
+			paymentPlan.IsComplete = true
+		}
+
+		paymentPlans = append(paymentPlans, paymentPlan)
+	}
 
 	return
 
