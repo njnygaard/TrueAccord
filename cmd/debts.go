@@ -1,36 +1,96 @@
 package cmd
 
 import (
-	"fmt"
-
+	"encoding/json"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"time"
 )
 
-// debtsCmd represents the debts command
+const DebtsRoute = "https://my-json-server.typicode.com/druska/trueaccord-mock-payments-api/debts"
+
+type DebtResponse struct {
+	Id     int     `json:"id"`
+	Amount float64 `json:"amount"`
+}
+
 var debtsCmd = &cobra.Command{
 	Use:   "debts",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "output debts to stdout in JSON Lines format",
+	Long: `
+Consume data from the HTTP API endpoints described below and output debts to stdout in JSON Lines format.
+- Each line contains:
+    - All the Debt object's fields returned by the API
+    - An additional boolean value, "is_in_payment_plan", which is: 
+      - true when the debt is associated with an active payment plan. 
+      - false when there is no payment plan, or the payment plan is completed.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("debts called")
+		gatherResponses()
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(debtsCmd)
+}
 
-	// Here you will define your flags and configuration settings.
+func gatherResponses()(){
 
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// debtsCmd.PersistentFlags().String("foo", "", "A help for foo")
+	logger := logrus.New()
+	var err error
+	var debts []DebtResponse
 
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// debtsCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	debts, err = getDebts()
+	if err != nil {
+		logger.Fatal("error getting debts")
+		return
+	}
+
+	logger.Info(spew.Sdump(debts))
+}
+
+func getDebts()(debts []DebtResponse, err error){
+
+	logger := logrus.New()
+
+	c := http.Client{
+		Timeout: time.Second * 2,
+	}
+
+	req, err := http.NewRequest(http.MethodGet, DebtsRoute, nil)
+	if err != nil {
+		logger.Error(err)
+		return
+	}
+
+	res, getErr := c.Do(req)
+	if getErr != nil {
+		logger.Error(getErr)
+		return
+	}
+
+	if res.Body != nil {
+		// Closure to explicitly ignore deferred error
+		defer func(Body io.ReadCloser) {
+			_ = Body.Close()
+		}(res.Body)
+	}
+
+	body, readErr := ioutil.ReadAll(res.Body)
+	if readErr != nil {
+		logger.Error(readErr)
+		return
+	}
+
+	jsonErr := json.Unmarshal(body, &debts)
+	if jsonErr != nil {
+		logger.Error(jsonErr)
+		return
+	}
+
+	return
+
 }
