@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
-	"github.com/davecgh/go-spew/spew"
+	"fmt"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"io"
@@ -21,10 +21,11 @@ type DebtResponse struct {
 }
 
 type Debt struct {
-	Id              int     `json:"id"`
-	Amount          float64 `json:"amount"`
-	IsInPaymentPlan bool    `json:"is_in_payment_plan"`
-	RemainingAmount float64 `json:"remaining_amount"`
+	Id                 int       `json:"id"`
+	Amount             float64   `json:"amount"`
+	IsInPaymentPlan    bool      `json:"is_in_payment_plan"`
+	RemainingAmount    float64   `json:"remaining_amount"`
+	NextPaymentDueDate time.Time `json:"next_payment_due_date"`
 }
 
 type PaymentPlanResponse struct {
@@ -74,6 +75,8 @@ func init() {
 func gatherResponses() {
 
 	logger := logrus.New()
+	//logger.SetFormatter(&logrus.JSONFormatter{})
+
 	var err error
 	var debts []DebtResponse
 	var payments []PaymentResponse
@@ -113,12 +116,24 @@ func gatherResponses() {
 		return
 	}
 
-	logger.Info(spew.Sdump(processedDebts))
+	for i := range processedDebts {
+
+		j, err := json.Marshal(processedDebts[i])
+		if err != nil {
+			logger.Error("Failed to generate json", err)
+		}
+
+		// Bare
+		fmt.Printf("%s\n", string(j))
+
+		// Decorated
+		//logger.Info(fmt.Sprintf("%s\n", string(j)))
+	}
+
 }
 
 func processDebts(d []DebtResponse, pp []PaymentPlan, _ []PaymentResponse) (debts []Debt, err error) {
 
-	logger := logrus.New()
 	// TODO: Consume PaymentPlan not PaymentPlanResponse
 	// We need to know if a given paymentPlan is complete
 
@@ -135,6 +150,7 @@ func processDebts(d []DebtResponse, pp []PaymentPlan, _ []PaymentResponse) (debt
 	for i := range d {
 		var paymentPlanFound bool // zero value false
 		var remainingAmount float64
+		var nexPaymentDueDate time.Time
 
 		for j := range pp {
 
@@ -142,13 +158,16 @@ func processDebts(d []DebtResponse, pp []PaymentPlan, _ []PaymentResponse) (debt
 			// There is a discount for signing up for a payment plan
 			if d[i].Id == pp[j].DebtId {
 				paymentPlanFound = true
-				logger.Warn(spew.Sdump(pp[j]))
 
 				if pp[j].IsComplete == true {
 					remainingAmount = 0
 				} else {
-					//remainingAmount = d[i].Amount - pp[j].AmountToPay
 					remainingAmount = pp[j].AmountToPay
+					// "Payments made on days outside the expected payment schedule still go toward paying off the *remaining_amount*, but do not change/delay the payment schedule."
+					// I take that to mean that late or early payments do not change next_payment_due_date
+					// So I will not factor in any of the dates on payment objects.
+					// That breaks down the calculation in to a modulus using an enum for the frequency.
+					nexPaymentDueDate = calculateNextPaymentDueDate(pp[j].StartDate, pp[j].InstallmentFrequency)
 				}
 
 				break
@@ -160,6 +179,7 @@ func processDebts(d []DebtResponse, pp []PaymentPlan, _ []PaymentResponse) (debt
 		debt.Id = d[i].Id
 		debt.Amount = d[i].Amount
 		debt.IsInPaymentPlan = paymentPlanFound
+		debt.NextPaymentDueDate = nexPaymentDueDate
 
 		if paymentPlanFound {
 			debt.RemainingAmount = remainingAmount
@@ -169,6 +189,49 @@ func processDebts(d []DebtResponse, pp []PaymentPlan, _ []PaymentResponse) (debt
 
 		debts = append(debts, debt)
 
+	}
+
+	return
+}
+
+func calculateNextPaymentDueDate(startDate string, installmentFrequency string) (nextPaymentDueDate time.Time) {
+
+	const (
+		format   = "2006-01-02"
+		weekly   = "WEEKLY"
+		biweekly = "BI_WEEKLY"
+	)
+
+	var err error
+	var start time.Time
+
+	now := time.Now()
+
+	start, err = time.Parse(format, startDate)
+	if err != nil {
+		return time.Time{}
+	}
+
+	var freq time.Duration
+	switch installmentFrequency {
+	case weekly:
+		freq = time.Hour * 24 * 7
+		break
+	case biweekly:
+		freq = time.Hour * 24 * 7 * 2
+		break
+	default:
+		return time.Time{}
+	}
+
+	var nextFound bool
+
+	for !nextFound {
+		start = start.Add(freq)
+		if start.After(now) {
+			nextFound = true
+			nextPaymentDueDate = start
+		}
 	}
 
 	return
