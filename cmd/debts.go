@@ -24,6 +24,7 @@ type Debt struct {
 	Id              int     `json:"id"`
 	Amount          float64 `json:"amount"`
 	IsInPaymentPlan bool    `json:"is_in_payment_plan"`
+	RemainingAmount float64 `json:"remaining_amount"`
 }
 
 type PaymentPlanResponse struct {
@@ -117,6 +118,7 @@ func gatherResponses() {
 
 func processDebts(d []DebtResponse, pp []PaymentPlan, _ []PaymentResponse) (debts []Debt, err error) {
 
+	logger := logrus.New()
 	// TODO: Consume PaymentPlan not PaymentPlanResponse
 	// We need to know if a given paymentPlan is complete
 
@@ -132,20 +134,41 @@ func processDebts(d []DebtResponse, pp []PaymentPlan, _ []PaymentResponse) (debt
 
 	for i := range d {
 		var paymentPlanFound bool // zero value false
+		var remainingAmount float64
+
 		for j := range pp {
-			if d[i].Id == pp[j].DebtId && pp[j].IsComplete != true {
+
+			// If there is a payment plan, we use the amount_to_pay instead of the debt amount
+			// There is a discount for signing up for a payment plan
+			if d[i].Id == pp[j].DebtId {
 				paymentPlanFound = true
+				logger.Warn(spew.Sdump(pp[j]))
+
+				if pp[j].IsComplete == true {
+					remainingAmount = 0
+				} else {
+					//remainingAmount = d[i].Amount - pp[j].AmountToPay
+					remainingAmount = pp[j].AmountToPay
+				}
+
 				break
 			}
 		}
 
 		var debt Debt
+
 		debt.Id = d[i].Id
 		debt.Amount = d[i].Amount
-
 		debt.IsInPaymentPlan = paymentPlanFound
 
+		if paymentPlanFound {
+			debt.RemainingAmount = remainingAmount
+		} else {
+			debt.RemainingAmount = d[i].Amount
+		}
+
 		debts = append(debts, debt)
+
 	}
 
 	return
