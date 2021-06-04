@@ -20,6 +20,12 @@ type DebtResponse struct {
 	Amount float64 `json:"amount"`
 }
 
+type Debt struct {
+	Id              int     `json:"id"`
+	Amount          float64 `json:"amount"`
+	IsInPaymentPlan bool    `json:"is_in_payment_plan"`
+}
+
 type PaymentPlanResponse struct {
 	Id                   int     `json:"id"`
 	DebtId               int     `json:"debt_id"`
@@ -27,6 +33,16 @@ type PaymentPlanResponse struct {
 	InstallmentFrequency string  `json:"installment_frequency"`
 	InstallmentAmount    float64 `json:"installment_amount"`
 	StartDate            string  `json:"start_date"`
+}
+
+type PaymentPlan struct {
+	Id                   int     `json:"id"`
+	DebtId               int     `json:"debt_id"`
+	AmountToPay          float64 `json:"amount_to_pay"`
+	InstallmentFrequency string  `json:"installment_frequency"`
+	InstallmentAmount    float64 `json:"installment_amount"`
+	StartDate            string  `json:"start_date"`
+	IsComplete           bool    `json:"is_complete"`
 }
 
 type PaymentResponse struct {
@@ -54,19 +70,19 @@ func init() {
 	rootCmd.AddCommand(debtsCmd)
 }
 
-func gatherResponses()(){
+func gatherResponses() {
 
 	logger := logrus.New()
 	var err error
-	var debts []DebtResponse
+	//var debts []DebtResponse
 	var payments []PaymentResponse
 	var paymentPlans []PaymentPlanResponse
 
-	debts, err = getDebts()
-	if err != nil {
-		logger.Fatal("error getting debts")
-		return
-	}
+	//debts, err = getDebts()
+	//if err != nil {
+	//	logger.Fatal("error getting debts")
+	//	return
+	//}
 
 	payments, err = getPayments()
 	if err != nil {
@@ -80,12 +96,68 @@ func gatherResponses()(){
 		return
 	}
 
-	logger.Info(spew.Sdump(debts))
-	logger.Info(spew.Sdump(payments))
-	logger.Info(spew.Sdump(paymentPlans))
+	var processedPaymentPlans []PaymentPlan
+	processedPaymentPlans, err = processPaymentPlans(paymentPlans, payments)
+	if err != nil {
+		logger.Error("could not process debts")
+		return
+	}
+
+	logger.Info(spew.Sdump(processedPaymentPlans))
+
+	//var processedDebts []Debt
+	//processedDebts, err = processDebts(debts, paymentPlans, payments)
+	//if err != nil {
+	//	logger.Error("could not process debts")
+	//	return
+	//}
+
+	//logger.Info(spew.Sdump(processedDebts))
 }
 
-func getDebts()(debts []DebtResponse, err error){
+func processDebts(d []DebtResponse, pp []PaymentPlanResponse, _ []PaymentResponse) (debts []Debt, err error) {
+
+	// TODO: Consume PaymentPlan not PaymentPlanResponse
+	// We need to know if a given paymentPlan is complete
+
+	/*
+	   - An additional boolean value, "*is_in_payment_plan*", which is:
+	     - true when the debt is associated with an active payment plan.
+	     - false when there is no payment plan, or the payment plan is completed.
+	*/
+
+	// That's interesting. I should decorate the payment plan first with a field to determine
+	// if it is complete. I have to get all the payments and add them up to see if a given
+	// paymentPlan is complete.
+
+	for i := range d {
+		var paymentPlanFound bool // zero value false
+		for j := range pp {
+			if d[i].Id == pp[j].DebtId {
+				paymentPlanFound = true
+				break
+			}
+		}
+
+		var debt Debt
+		debt.Id = d[i].Id
+		debt.Amount = d[i].Amount
+
+		debt.IsInPaymentPlan = paymentPlanFound
+
+		debts = append(debts, debt)
+	}
+
+	return
+}
+
+func processPaymentPlans(pp []PaymentPlanResponse, p []PaymentResponse)(paymentPlans []PaymentPlan, err error) {
+
+	return
+
+}
+
+func getDebts() (debts []DebtResponse, err error) {
 
 	logger := logrus.New()
 
@@ -128,7 +200,7 @@ func getDebts()(debts []DebtResponse, err error){
 
 }
 
-func getPaymentPlans()(paymentPlans []PaymentPlanResponse, err error){
+func getPaymentPlans() (paymentPlans []PaymentPlanResponse, err error) {
 
 	logger := logrus.New()
 
@@ -171,8 +243,7 @@ func getPaymentPlans()(paymentPlans []PaymentPlanResponse, err error){
 
 }
 
-
-func getPayments()(payments []PaymentResponse, err error){
+func getPayments() (payments []PaymentResponse, err error) {
 
 	logger := logrus.New()
 
