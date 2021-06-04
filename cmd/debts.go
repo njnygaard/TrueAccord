@@ -12,10 +12,27 @@ import (
 )
 
 const DebtsRoute = "https://my-json-server.typicode.com/druska/trueaccord-mock-payments-api/debts"
+const PaymentPlansRoute = "https://my-json-server.typicode.com/druska/trueaccord-mock-payments-api/payment_plans"
+const PaymentsRoute = "https://my-json-server.typicode.com/druska/trueaccord-mock-payments-api/payments"
 
 type DebtResponse struct {
 	Id     int     `json:"id"`
 	Amount float64 `json:"amount"`
+}
+
+type PaymentPlanResponse struct {
+	Id                   int     `json:"id"`
+	DebtId               int     `json:"debt_id"`
+	AmountToPay          float64 `json:"amount_to_pay"`
+	InstallmentFrequency string  `json:"installment_frequency"`
+	InstallmentAmount    float64 `json:"installment_amount"`
+	StartDate            string  `json:"start_date"`
+}
+
+type PaymentResponse struct {
+	PaymentPlanId int     `json:"payment_plan_id"`
+	Amount        float64 `json:"amount"`
+	Date          string  `json:"date"`
 }
 
 var debtsCmd = &cobra.Command{
@@ -42,6 +59,8 @@ func gatherResponses()(){
 	logger := logrus.New()
 	var err error
 	var debts []DebtResponse
+	var payments []PaymentResponse
+	var paymentPlans []PaymentPlanResponse
 
 	debts, err = getDebts()
 	if err != nil {
@@ -49,7 +68,21 @@ func gatherResponses()(){
 		return
 	}
 
+	payments, err = getPayments()
+	if err != nil {
+		logger.Fatal("error getting payments")
+		return
+	}
+
+	paymentPlans, err = getPaymentPlans()
+	if err != nil {
+		logger.Fatal("error getting payment plans")
+		return
+	}
+
 	logger.Info(spew.Sdump(debts))
+	logger.Info(spew.Sdump(payments))
+	logger.Info(spew.Sdump(paymentPlans))
 }
 
 func getDebts()(debts []DebtResponse, err error){
@@ -86,6 +119,93 @@ func getDebts()(debts []DebtResponse, err error){
 	}
 
 	jsonErr := json.Unmarshal(body, &debts)
+	if jsonErr != nil {
+		logger.Error(jsonErr)
+		return
+	}
+
+	return
+
+}
+
+func getPaymentPlans()(paymentPlans []PaymentPlanResponse, err error){
+
+	logger := logrus.New()
+
+	c := http.Client{
+		Timeout: time.Second * 2,
+	}
+
+	req, err := http.NewRequest(http.MethodGet, PaymentPlansRoute, nil)
+	if err != nil {
+		logger.Error(err)
+		return
+	}
+
+	res, getErr := c.Do(req)
+	if getErr != nil {
+		logger.Error(getErr)
+		return
+	}
+
+	if res.Body != nil {
+		// Closure to explicitly ignore deferred error
+		defer func(Body io.ReadCloser) {
+			_ = Body.Close()
+		}(res.Body)
+	}
+
+	body, readErr := ioutil.ReadAll(res.Body)
+	if readErr != nil {
+		logger.Error(readErr)
+		return
+	}
+
+	jsonErr := json.Unmarshal(body, &paymentPlans)
+	if jsonErr != nil {
+		logger.Error(jsonErr)
+		return
+	}
+
+	return
+
+}
+
+
+func getPayments()(payments []PaymentResponse, err error){
+
+	logger := logrus.New()
+
+	c := http.Client{
+		Timeout: time.Second * 2,
+	}
+
+	req, err := http.NewRequest(http.MethodGet, PaymentsRoute, nil)
+	if err != nil {
+		logger.Error(err)
+		return
+	}
+
+	res, getErr := c.Do(req)
+	if getErr != nil {
+		logger.Error(getErr)
+		return
+	}
+
+	if res.Body != nil {
+		// Closure to explicitly ignore deferred error
+		defer func(Body io.ReadCloser) {
+			_ = Body.Close()
+		}(res.Body)
+	}
+
+	body, readErr := ioutil.ReadAll(res.Body)
+	if readErr != nil {
+		logger.Error(readErr)
+		return
+	}
+
+	jsonErr := json.Unmarshal(body, &payments)
 	if jsonErr != nil {
 		logger.Error(jsonErr)
 		return
