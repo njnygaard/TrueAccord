@@ -75,7 +75,6 @@ func init() {
 func gatherResponses() {
 
 	logger := logrus.New()
-	//logger.SetFormatter(&logrus.JSONFormatter{})
 
 	var err error
 	var debts []DebtResponse
@@ -107,8 +106,6 @@ func gatherResponses() {
 		return
 	}
 
-	//logger.Info(spew.Sdump(processedPaymentPlans))
-
 	var processedDebts []Debt
 	processedDebts, err = processDebts(debts, processedPaymentPlans, payments)
 	if err != nil {
@@ -132,9 +129,136 @@ func gatherResponses() {
 
 }
 
+func getDebts() (debts []DebtResponse, err error) {
+
+	logger := logrus.New()
+
+	c := http.Client{
+		Timeout: time.Second * 2,
+	}
+
+	req, err := http.NewRequest(http.MethodGet, DebtsRoute, nil)
+	if err != nil {
+		logger.Error(err)
+		return
+	}
+
+	res, getErr := c.Do(req)
+	if getErr != nil {
+		logger.Error(getErr)
+		return
+	}
+
+	if res.Body != nil {
+		// Closure to explicitly ignore deferred error
+		defer func(Body io.ReadCloser) {
+			_ = Body.Close()
+		}(res.Body)
+	}
+
+	body, readErr := ioutil.ReadAll(res.Body)
+	if readErr != nil {
+		logger.Error(readErr)
+		return
+	}
+
+	jsonErr := json.Unmarshal(body, &debts)
+	if jsonErr != nil {
+		logger.Error(jsonErr)
+		return
+	}
+
+	return
+
+}
+func getPaymentPlans() (paymentPlans []PaymentPlanResponse, err error) {
+
+	logger := logrus.New()
+
+	c := http.Client{
+		Timeout: time.Second * 2,
+	}
+
+	req, err := http.NewRequest(http.MethodGet, PaymentPlansRoute, nil)
+	if err != nil {
+		logger.Error(err)
+		return
+	}
+
+	res, getErr := c.Do(req)
+	if getErr != nil {
+		logger.Error(getErr)
+		return
+	}
+
+	if res.Body != nil {
+		// Closure to explicitly ignore deferred error
+		defer func(Body io.ReadCloser) {
+			_ = Body.Close()
+		}(res.Body)
+	}
+
+	body, readErr := ioutil.ReadAll(res.Body)
+	if readErr != nil {
+		logger.Error(readErr)
+		return
+	}
+
+	jsonErr := json.Unmarshal(body, &paymentPlans)
+	if jsonErr != nil {
+		logger.Error(jsonErr)
+		return
+	}
+
+	return
+
+}
+func getPayments() (payments []PaymentResponse, err error) {
+
+	logger := logrus.New()
+
+	c := http.Client{
+		Timeout: time.Second * 2,
+	}
+
+	req, err := http.NewRequest(http.MethodGet, PaymentsRoute, nil)
+	if err != nil {
+		logger.Error(err)
+		return
+	}
+
+	res, getErr := c.Do(req)
+	if getErr != nil {
+		logger.Error(getErr)
+		return
+	}
+
+	if res.Body != nil {
+		// Closure to explicitly ignore deferred error
+		defer func(Body io.ReadCloser) {
+			_ = Body.Close()
+		}(res.Body)
+	}
+
+	body, readErr := ioutil.ReadAll(res.Body)
+	if readErr != nil {
+		logger.Error(readErr)
+		return
+	}
+
+	jsonErr := json.Unmarshal(body, &payments)
+	if jsonErr != nil {
+		logger.Error(jsonErr)
+		return
+	}
+
+	return
+
+}
+
 func processDebts(d []DebtResponse, pp []PaymentPlan, _ []PaymentResponse) (debts []Debt, err error) {
 
-	// TODO: Consume PaymentPlan not PaymentPlanResponse
+	// DONE: Consume PaymentPlan not PaymentPlanResponse
 	// We need to know if a given paymentPlan is complete
 
 	/*
@@ -194,6 +318,41 @@ func processDebts(d []DebtResponse, pp []PaymentPlan, _ []PaymentResponse) (debt
 	return
 }
 
+func processPaymentPlans(pp []PaymentPlanResponse, p []PaymentResponse) (paymentPlans []PaymentPlan, err error) {
+
+	for i := range p {
+		for j := range pp {
+			if p[i].PaymentPlanId == pp[j].Id {
+				pp[j].AmountToPay -= p[i].Amount
+			}
+		}
+	}
+
+	for i := range pp {
+
+		var paymentPlan PaymentPlan
+		paymentPlan.Id = pp[i].Id
+		paymentPlan.DebtId = pp[i].DebtId
+		paymentPlan.AmountToPay = pp[i].AmountToPay
+		paymentPlan.InstallmentFrequency = pp[i].InstallmentFrequency
+		paymentPlan.InstallmentAmount = pp[i].InstallmentAmount
+		paymentPlan.StartDate = pp[i].StartDate
+
+		// TODO: Negative Check
+		// I didn't complete this because I think it is unnecessary.
+		// If we decrement the payment plan below, it means the user overpaid.
+		// That opens up a whole other pathway, I think it is sufficient to say the plan is done for now.
+		if pp[i].AmountToPay <= 0 {
+			paymentPlan.IsComplete = true
+		}
+
+		paymentPlans = append(paymentPlans, paymentPlan)
+	}
+
+	return
+
+}
+
 func calculateNextPaymentDueDate(startDate string, installmentFrequency string) (nextPaymentDueDate time.Time) {
 
 	const (
@@ -235,165 +394,4 @@ func calculateNextPaymentDueDate(startDate string, installmentFrequency string) 
 	}
 
 	return
-}
-
-func processPaymentPlans(pp []PaymentPlanResponse, p []PaymentResponse) (paymentPlans []PaymentPlan, err error) {
-
-	for i := range p {
-		for j := range pp {
-			if p[i].PaymentPlanId == pp[j].Id {
-				pp[j].AmountToPay -= p[i].Amount
-			}
-		}
-	}
-
-	for i := range pp {
-
-		var paymentPlan PaymentPlan
-		paymentPlan.Id = pp[i].Id
-		paymentPlan.DebtId = pp[i].DebtId
-		paymentPlan.AmountToPay = pp[i].AmountToPay
-		paymentPlan.InstallmentFrequency = pp[i].InstallmentFrequency
-		paymentPlan.InstallmentAmount = pp[i].InstallmentAmount
-		paymentPlan.StartDate = pp[i].StartDate
-
-		// TODO: Negative Check
-		if pp[i].AmountToPay <= 0 {
-			paymentPlan.IsComplete = true
-		}
-
-		paymentPlans = append(paymentPlans, paymentPlan)
-	}
-
-	return
-
-}
-
-func getDebts() (debts []DebtResponse, err error) {
-
-	logger := logrus.New()
-
-	c := http.Client{
-		Timeout: time.Second * 2,
-	}
-
-	req, err := http.NewRequest(http.MethodGet, DebtsRoute, nil)
-	if err != nil {
-		logger.Error(err)
-		return
-	}
-
-	res, getErr := c.Do(req)
-	if getErr != nil {
-		logger.Error(getErr)
-		return
-	}
-
-	if res.Body != nil {
-		// Closure to explicitly ignore deferred error
-		defer func(Body io.ReadCloser) {
-			_ = Body.Close()
-		}(res.Body)
-	}
-
-	body, readErr := ioutil.ReadAll(res.Body)
-	if readErr != nil {
-		logger.Error(readErr)
-		return
-	}
-
-	jsonErr := json.Unmarshal(body, &debts)
-	if jsonErr != nil {
-		logger.Error(jsonErr)
-		return
-	}
-
-	return
-
-}
-
-func getPaymentPlans() (paymentPlans []PaymentPlanResponse, err error) {
-
-	logger := logrus.New()
-
-	c := http.Client{
-		Timeout: time.Second * 2,
-	}
-
-	req, err := http.NewRequest(http.MethodGet, PaymentPlansRoute, nil)
-	if err != nil {
-		logger.Error(err)
-		return
-	}
-
-	res, getErr := c.Do(req)
-	if getErr != nil {
-		logger.Error(getErr)
-		return
-	}
-
-	if res.Body != nil {
-		// Closure to explicitly ignore deferred error
-		defer func(Body io.ReadCloser) {
-			_ = Body.Close()
-		}(res.Body)
-	}
-
-	body, readErr := ioutil.ReadAll(res.Body)
-	if readErr != nil {
-		logger.Error(readErr)
-		return
-	}
-
-	jsonErr := json.Unmarshal(body, &paymentPlans)
-	if jsonErr != nil {
-		logger.Error(jsonErr)
-		return
-	}
-
-	return
-
-}
-
-func getPayments() (payments []PaymentResponse, err error) {
-
-	logger := logrus.New()
-
-	c := http.Client{
-		Timeout: time.Second * 2,
-	}
-
-	req, err := http.NewRequest(http.MethodGet, PaymentsRoute, nil)
-	if err != nil {
-		logger.Error(err)
-		return
-	}
-
-	res, getErr := c.Do(req)
-	if getErr != nil {
-		logger.Error(getErr)
-		return
-	}
-
-	if res.Body != nil {
-		// Closure to explicitly ignore deferred error
-		defer func(Body io.ReadCloser) {
-			_ = Body.Close()
-		}(res.Body)
-	}
-
-	body, readErr := ioutil.ReadAll(res.Body)
-	if readErr != nil {
-		logger.Error(readErr)
-		return
-	}
-
-	jsonErr := json.Unmarshal(body, &payments)
-	if jsonErr != nil {
-		logger.Error(jsonErr)
-		return
-	}
-
-	return
-
 }
