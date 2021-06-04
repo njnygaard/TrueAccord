@@ -1,6 +1,6 @@
 # TrueAccord Take Home
 
-Please complete the following exercise at your leisure. There is no strict time limit, but if you've commited to complete this exercise at a certain time, please make your best attempt to do so, as our evaluators will be expecting it. 
+Please complete the following exercise at your leisure. There is no strict time limit, but if you've committed to complete this exercise at a certain time, please make your best attempt to do so, as our evaluators will be expecting it.
 
 To make it easier to evaluate the exercise, please complete the exercise in one of the following languages:
 
